@@ -7,13 +7,13 @@ from pathlib import Path
 import uuid
 import re
 from enum import Enum
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 # Load environment
-load_dotenv()
+#load_dotenv()
 
 # ========== CONFIGURATION ==========
 class Config:
@@ -1652,3 +1652,4 @@ if __name__ == "__main__":
         st.error(f"An error occurred: {str(e)}")
 
         st.info("Please refresh the page or check your connection.")
+
