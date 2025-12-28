@@ -1631,15 +1631,17 @@ def show_about():
 
 # ========== RUN THE APP ==========
 if __name__ == "__main__":
-    # Check for required environment variable
-    if not os.getenv("GROQ_API_KEY"):
+    # Check for required secret (Streamlit Cloud)
+    if "GROQ_API_KEY" not in st.secrets:
         st.error("""
-        ⚠️ **GROQ_API_KEY not found!**
+        ⚠️ **GROQ_API_KEY not found in secrets!**
         
-        Please create a `.env` file in the same directory with:
-        ```
-        GROQ_API_KEY=your_groq_api_key_here
-        ```
+        Please add GROQ_API_KEY to your Streamlit secrets:
+        
+        1. Go to your app on Streamlit Cloud
+        2. Click "Settings" (⚙️)
+        3. Go to "Secrets" tab
+        4. Add: GROQ_API_KEY = "your_key_here"
         
         Get your API key from: https://console.groq.com/keys
         """)
@@ -1650,7 +1652,7 @@ if __name__ == "__main__":
         
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
-
         st.info("Please refresh the page or check your connection.")
+
 
 
