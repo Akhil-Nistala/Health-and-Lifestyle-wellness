@@ -72,7 +72,7 @@ Get your key from:
 Run:
 
 ```
-python lifestyle4.py
+python lifestyle_final.py
 ```
 
 ---
