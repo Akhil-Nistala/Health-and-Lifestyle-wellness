@@ -269,7 +269,7 @@ class LLMService:
         try:
             from langchain_groq import ChatGroq
             return ChatGroq(
-                api_key=self.api_key,
+                groq_api_key=self.api_key,
                 model=Config.MODEL,
                 temperature=0.7,
                 max_tokens=2000
@@ -1652,4 +1652,5 @@ if __name__ == "__main__":
         st.error(f"An error occurred: {str(e)}")
 
         st.info("Please refresh the page or check your connection.")
+
 
