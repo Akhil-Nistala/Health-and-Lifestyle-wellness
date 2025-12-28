@@ -256,7 +256,7 @@ class DatabaseManager:
 # ========== LLM SERVICE ==========
 class LLMService:
     def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY")
+        self.api_key = st.secrets["GROQ_API_KEY"]
         if not self.api_key:
             st.error("❌ GROQ_API_KEY not found in .env file!")
             st.info("Please create a `.env` file with: GROQ_API_KEY=your_key_here")
@@ -1647,6 +1647,8 @@ if __name__ == "__main__":
     
     try:
         main()
+        
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
+
         st.info("Please refresh the page or check your connection.")
