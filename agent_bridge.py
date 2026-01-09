@@ -264,7 +264,9 @@ class AgentBridge:
             
             if agent_type in ['diet', 'fitness', 'health']:
                 # Use HealthAISystem for consistent agent execution
+                self.agent_system.ensure_agents_ready()
                 result = self.agent_system.run_analysis(agent_type)
+
                 
                 # HealthAISystem.run_analysis() returns None in CLI mode
                 # We need to simulate the agent execution
@@ -360,4 +362,5 @@ class AgentBridge:
                 'iterations': 0,
                 'confidence': 0.0,
                 'reasoning_trace': []
+
             }
