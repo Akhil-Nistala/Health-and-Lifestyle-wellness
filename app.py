@@ -6,7 +6,6 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 import uuid
 import pandas as pd
-from agent_bridge import AgentBridge
 
 # ========== CONFIGURATION ==========
 class Config:
@@ -16,38 +15,6 @@ class Config:
 
 # Ensure data directory exists
 Config.DATA_DIR.mkdir(exist_ok=True)
-
-# ========== HELPER FUNCTION FOR AGENT METADATA ==========
-def display_agent_metadata(metadata: Dict, agent_type: str):
-    """Display agent execution metadata with defensive checks"""
-    if not metadata:
-        return
-    
-    with st.expander(f"🤖 Agent Execution Details ({agent_type})"):
-        col1, col2 = st.columns(2)
-        with col1:
-            iterations = metadata.get('iterations', 0)
-            max_iterations = metadata.get('max_iterations', 3)
-            if iterations is not None and max_iterations is not None:
-                st.metric("TAO Iterations", 
-                         f"{iterations}/{max_iterations}")
-        
-        with col2:
-            confidence = metadata.get('confidence', 0.5)
-            if confidence is not None:
-                st.metric("Confidence Score", f"{confidence:.2f}")
-        
-        # Show reasoning trace if available
-        reasoning_trace = metadata.get('reasoning_trace', [])
-        if reasoning_trace:
-            st.subheader("Reasoning Trace")
-            for i, step in enumerate(reasoning_trace, 1):
-                if isinstance(step, dict):
-                    with st.expander(f"Step {i}: {step.get('phase', 'unknown').title()}"):
-                        st.write(f"**Iteration:** {step.get('iteration', 'N/A')}")
-                        insight = step.get('insight', '')
-                        if insight:
-                            st.write(f"**Insight:** {insight}")
 
 # ========== DATA MODELS ==========
 class DietType:
@@ -294,22 +261,16 @@ class LLMService:
         if not self.api_key:
             self.api_key = os.getenv("GROQ_API_KEY")
         
-        # Method 3: Prompt user to enter it (but only if not already in session)
-        if not self.api_key and 'api_key_entered' not in st.session_state:
-            with st.sidebar.expander("🔑 API Key Setup", expanded=False):
-                st.warning("GROQ_API_KEY not found. Please enter it below:")
-                self.api_key = st.text_input(
-                    "Enter your Groq API Key (get it from https://console.groq.com/keys):",
-                    type="password",
-                    key="api_key_input"
-                )
-                if self.api_key:
-                    st.session_state.api_key_entered = True
-                    st.success("API Key saved for this session!")
-                    st.rerun()
+        # Method 3: Prompt user to enter it
+        if not self.api_key:
+            st.warning("⚠️ GROQ_API_KEY not found in secrets or environment variables.")
+            self.api_key = st.text_input(
+                "Enter your Groq API Key (get it from https://console.groq.com/keys):",
+                type="password"
+            )
         
         if not self.api_key:
-            # Don't show error immediately, allow user to enter in sidebar
+            st.error("Please provide a Groq API Key to use AI features.")
             self.llm = None
             return
         
@@ -342,7 +303,7 @@ class LLMService:
     def call_llm(self, prompt: str) -> str:
         """Call LLM with error handling"""
         if not self.llm:
-            return "⚠️ LLM service not available. Please install langchain-groq and provide a valid GROQ_API_KEY in the sidebar."
+            return "⚠️ LLM service not available. Please install langchain-groq and provide a valid GROQ_API_KEY."
         
         try:
             if isinstance(self.llm, MockLLM):
@@ -372,113 +333,199 @@ class MockLLM:
     def _generate_diet_plan(self, prompt: str) -> str:
         return """📋 PERSONALIZED 7-DAY DIET PLAN
 
-DAY 1:
+DAILY CALORIE TARGET: 2,200 calories
+MACRONUTRIENT BREAKDOWN:
+- Protein: 110g (20%)
+- Carbs: 275g (50%)
+- Fats: 73g (30%)
+
+DAY 1 (Monday):
 🥞 Breakfast (8 AM): 2 idlis with sambar + 1 cup milk + 1 banana (350 cal)
+☕ Mid-morning (11 AM): Green tea + handful of almonds (100 cal)
 🍛 Lunch (1 PM): 2 rotis + 1 cup dal + 1 cup mixed vegetable curry + salad (550 cal)
-🍽️ Dinner (7 PM): 1 cup brown rice + 1 cup chicken curry (or paneer) + salad (600 cal)
-📊 Daily Targets: 2,200 cal | Protein: 110g | Carbs: 275g | Fats: 73g
+🍎 Evening (4 PM): Apple + 1 cup Greek yogurt (200 cal)
+🍽️ Dinner (7 PM): 1 cup brown rice + 1 cup chicken curry (or paneer for vegetarians) + salad (600 cal)
+🥛 Before bed: 1 cup warm milk (150 cal)
 
-DAY 2:
-🥣 Breakfast: Oats with milk + nuts + fruits (400 cal)
-🍲 Lunch: Rice + sambar + vegetable curry + curd (600 cal)
-🍛 Dinner: Roti + paneer bhurji + salad (500 cal)
-📊 Daily Targets: 2,200 cal | Protein: 115g | Carbs: 270g | Fats: 70g
+DAY 2-7: Similar rotation with variety of Indian dishes...
 
-DAY 3-7: Similar rotation with variety...
+GROCERY SHOPPING LIST:
+- Grains: Brown rice (2kg), Whole wheat flour (2kg), Oats (1kg)
+- Proteins: Chicken (1kg) / Paneer (500g), Lentils (1kg), Milk (4L), Yogurt (2kg)
+- Vegetables: Spinach, Tomatoes, Onions, Potatoes, Mixed vegetables
+- Fruits: Bananas, Apples, Oranges
+- Nuts: Almonds, Walnuts
 
-HYDRATION: 3-4 liters daily
-SUPPLEMENTS: Multivitamin, Vitamin D"""
+MEAL PREP TIPS:
+1. Cook dal and rice in bulk for 3 days
+2. Chop vegetables in advance
+3. Prepare spice mixes
+
+HYDRATION PLAN: 3-4 liters daily
+SNACK IDEAS: Roasted chana, fruit, nuts
+COST ESTIMATE: ₹1,500-₹2,000 per week
+
+Note: Adjust portions based on your specific calorie needs!"""
 
     def _generate_workout_plan(self, prompt: str) -> str:
         return """💪 4-WEEK PERSONALIZED WORKOUT PLAN
 
-WEEK 1 SCHEDULE:
-Monday (Upper Body): Push-ups 3x12, Rows 3x12, Shoulder Press 3x10
-Tuesday (Cardio + Core): Jumping jacks 3x30s, Plank 3x30s, Bicycle crunches 3x20
-Wednesday (Lower Body): Squats 3x15, Lunges 3x12, Glute bridges 3x15
-Thursday (Active Recovery): Yoga/stretching
-Friday (Full Body HIIT): Circuit training
-Saturday (Cardio): 30-min brisk walk
+WEEKLY SCHEDULE:
+Monday: Upper Body Strength
+Tuesday: Cardio + Core
+Wednesday: Lower Body Strength
+Thursday: Active Recovery (Yoga/Stretching)
+Friday: Full Body HIIT
+Saturday: Cardio Endurance
 Sunday: Rest
 
-PROGRESSION: Increase reps by 10% each week!
-SAFETY: Always warm up, maintain proper form."""
+WEEK 1 - FOUNDATION PHASE:
+Monday (Upper Body):
+- Push-ups: 3 sets of 10-12 reps
+- Dumbbell Rows: 3x12
+- Shoulder Press: 3x10
+- Tricep Dips: 3x12
+- Bicep Curls: 3x15
+
+Tuesday (Cardio + Core):
+- Jumping Jacks: 3x30 seconds
+- Mountain Climbers: 3x20
+- Plank: 3x30 seconds
+- Russian Twists: 3x20
+- Bicycle Crunches: 3x20
+
+EXERCISE INSTRUCTIONS:
+1. Push-ups: Keep back straight, lower chest to floor
+2. Squats: Feet shoulder-width, knees behind toes
+3. Plank: Engage core, keep body in straight line
+
+WARM-UP (5-10 minutes):
+- Dynamic stretches
+- Light cardio
+- Joint rotations
+
+COOL-DOWN (5-10 minutes):
+- Static stretches
+- Deep breathing
+
+SAFETY GUIDELINES:
+1. Always warm up before workouts
+2. Maintain proper form over heavy weights
+3. Stay hydrated
+4. Listen to your body
+
+PROGRESSION: Increase reps by 10% each week!"""
 
     def _generate_health_analysis(self, prompt: str) -> str:
         return """⚕️ HEALTH & WELLNESS ANALYSIS
 
-OVERALL ASSESSMENT: Good health with room for improvement
-BMI: 22.5 (Healthy range)
+NUTRITIONAL ASSESSMENT:
+✅ Strengths: Good variety in diet
+⚠️ Areas for improvement: Increase protein intake by 20g daily
+💡 Recommendation: Add protein source to each meal
 
-SLEEP ANALYSIS:
+EXERCISE RECOMMENDATIONS:
+- Current activity: Moderate
+- Goal: Build muscle
+- Recommended: 4 strength sessions + 2 cardio sessions weekly
+
+SLEEP OPTIMIZATION:
 - Current: 7 hours nightly
 - Target: 7-8 hours
-- Quality: 7/10
-- Recommendation: Consistent bedtime routine
+- Tips: Consistent bedtime, no screens 1 hour before sleep
 
-NUTRITION ASSESSMENT:
-✅ Strengths: Good variety
-⚠️ Areas: Increase protein by 20g daily
-💡 Action: Add protein source to each meal
+STRESS MANAGEMENT:
+- Current stress: Moderate (6/10)
+- Techniques: Deep breathing, daily walks, mindfulness
 
-ACTIVITY EVALUATION:
-- Current: Moderate (3-4 days/week)
-- Goal: Build muscle
-- Recommendation: 4 strength + 2 cardio sessions weekly
+LIFESTYLE IMPROVEMENTS:
+1. Morning routine: 15 min stretching
+2. Hydration: 3L water daily
+3. Screen breaks: Every 45 minutes
 
 ACTIONABLE RECOMMENDATIONS:
 1. Add 30g protein to breakfast
 2. Walk 10,000 steps daily
 3. Sleep by 11 PM consistently
 
-⚠️ Disclaimer: Not medical advice. Consult healthcare provider."""
+30-DAY IMPROVEMENT PLAN:
+Week 1-2: Establish routines
+Week 3-4: Increase intensity
+Track progress in daily check-ins!"""
 
     def _generate_mess_optimization(self, prompt: str) -> str:
         return """🍽️ MESS MEAL OPTIMIZATION PLAN
 
-BREAKFAST OPTIMIZATION:
-✅ Choose: Idli (2) + Sambar + Boiled egg
-❌ Avoid: Fried items (puri/bhature)
-Portion: Medium sambar, 2 idlis
-Nutrition: 350 cal, 15g protein
+MEAL-BY-MEAL RECOMMENDATIONS:
 
-LUNCH OPTIMIZATION:
-✅ Choose: Rice + Dal + Mixed veg + Salad
-✅ Add: Extra dal or chicken curry
-Portion: 50% veggies, 25% protein, 25% carbs
-Nutrition: 550 cal, 25g protein
+BREAKFAST (8:00 AM):
+✅ Choose: Idli (2 pieces) + Sambar (1 bowl) + 1 boiled egg
+❌ Avoid: Puri/Bhature (fried items)
+Portion: Medium bowl of sambar, 2 idlis
+Nutrition Rating: 8/10 (Good protein, low fat)
 
-DINNER OPTIMIZATION:
-✅ Choose: Roti + Paneer/Chicken curry + Salad
+LUNCH (1:00 PM):
+✅ Choose: Rice (1 cup) + Dal (1 bowl) + Mixed vegetable curry + Salad
+✅ Add: 100g chicken curry (if non-veg) or extra dal
+Portion: Balanced plate - 50% veggies, 25% protein, 25% carbs
+Nutrition Rating: 9/10 (Balanced meal)
+
+DINNER (7:00 PM):
+✅ Choose: 2 rotis + Paneer/Chicken curry + Salad
 ❌ Limit: Rice at dinner
-Portion: 2 rotis, 1 bowl curry
-Nutrition: 450 cal, 20g protein
+Portion: 2 medium rotis, 1 bowl curry
+Nutrition Rating: 8/10 (Light, high protein)
 
-DAILY TOTALS:
-Calories: ~1,350 | Protein: ~60g
-Supplement: Protein powder post-workout
+NUTRITIONAL ANALYSIS:
+Breakfast: ~350 cal, 15g protein
+Lunch: ~550 cal, 25g protein
+Dinner: ~450 cal, 20g protein
+Total: ~1,350 cal, 60g protein
+
+SUPPLEMENTATION:
+- Protein: Add whey protein (1 scoop) post-workout (₹30/serving)
+- Multivitamin: Daily with breakfast
+Cost: ₹500/month extra
+
+MEAL TIMING:
+8 AM: Breakfast
+11 AM: Green tea + nuts
+1 PM: Lunch
+4 PM: Fruit + yogurt
+7 PM: Dinner
+9 PM: Warm milk
 
 COST ANALYSIS:
-Mess food: Included
+Mess food: Included in fees
 Supplements: ₹500/month
-Value: Excellent (balanced nutrition)"""
+Value: Excellent (balanced nutrition at low cost)
+
+ALTERNATIVES:
+If items run out: Choose similar protein+veggie combos
+Room additions: Keep nuts, fruits, protein powder"""
 
     def _generate_general_response(self, prompt: str) -> str:
         return f"""🤖 AI RESPONSE DEMONSTRATION
 
-This is a mock response. For real AI:
-1. Get Groq API key: https://console.groq.com/keys
+This is a mock response since the LLM service is not fully configured.
+
+For real AI responses:
+1. Get a Groq API key from: https://console.groq.com/keys
 2. Install: pip install langchain-groq
-3. Add API key in sidebar
+3. Add your API key to the app
 
-General health tips:
-1. Stay hydrated (8-10 glasses daily)
+Prompt received: {prompt[:200]}...
+
+In a real implementation, this would be a personalized AI-generated response based on your specific health profile and needs.
+
+For now, here are general health tips:
+1. Stay hydrated with 8-10 glasses of water daily
 2. Include protein in every meal
-3. Get 7-8 hours quality sleep
-4. Move for 30+ minutes daily
-5. Eat colorful vegetables
+3. Get 7-8 hours of quality sleep
+4. Move for at least 30 minutes daily
+5. Eat a variety of colorful vegetables
 
-Consistency is key!"""
+Remember: Consistency is key to health improvements!"""
 
 # ========== HELPER FUNCTIONS ==========
 def calculate_sleep_score(hours: float, quality: int) -> float:
@@ -578,15 +625,6 @@ def main():
     .stButton > button {
         width: 100%;
     }
-    .agent-output {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        border: 1px solid #dee2e6;
-        max-height: 600px;
-        overflow-y: auto;
-    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -598,27 +636,15 @@ def main():
     if 'llm' not in st.session_state:
         st.session_state.llm = LLMService()
     
-    # Initialize Agent Bridge - with web mode
-    if 'agent_bridge' not in st.session_state:
-        st.session_state.agent_bridge = AgentBridge(streamlit_db=st.session_state.db)
-    
     # Initialize session states for storing AI responses
     if 'diet_plan_response' not in st.session_state:
         st.session_state.diet_plan_response = None
-    if 'diet_plan_metadata' not in st.session_state:
-        st.session_state.diet_plan_metadata = None
     if 'workout_plan_response' not in st.session_state:
         st.session_state.workout_plan_response = None
-    if 'workout_plan_metadata' not in st.session_state:
-        st.session_state.workout_plan_metadata = None
     if 'health_analysis_response' not in st.session_state:
         st.session_state.health_analysis_response = None
-    if 'health_analysis_metadata' not in st.session_state:
-        st.session_state.health_analysis_metadata = None
     if 'mess_optimization_response' not in st.session_state:
         st.session_state.mess_optimization_response = None
-    if 'mess_optimization_metadata' not in st.session_state:
-        st.session_state.mess_optimization_metadata = None
     
     # Initialize navigation state
     if 'selected_page' not in st.session_state:
@@ -673,24 +699,14 @@ def main():
                 
                 if st.button("🚪 Logout", use_container_width=True, type="secondary"):
                     for key in list(st.session_state.keys()):
-                        if key not in ['db', 'llm', 'agent_bridge', 'selected_page']:
+                        if key not in ['db', 'llm', 'selected_page']:
                             del st.session_state[key]
                     st.session_state.selected_page = "👤 Profile Setup"
                     st.rerun()
         
         st.markdown("---")
-        st.markdown("### Agent System Status")
-        
-        # Check agent bridge availability
-        agent_status = "🟢 Active" if st.session_state.agent_bridge.is_available() else "🔴 Inactive"
-        st.write(f"TAO Agent: {agent_status}")
-        
-        if not st.session_state.agent_bridge.is_available():
-            st.warning("Agent system not available. Using basic LLM.")
-        
-        st.markdown("---")
         st.markdown("### About")
-        st.info("AI-powered health assistant with autonomous TAO agents for personalized fitness and nutrition guidance.")
+        st.info("AI-powered health assistant for personalized fitness and nutrition guidance.")
     
     # Page routing
     if st.session_state.selected_page == "👤 Profile Setup":
@@ -961,6 +977,8 @@ def show_dashboard():
             st.button("📋 Mess Menu", disabled=True, use_container_width=True, 
                      help="Mess features require student status with mess access")
 
+# ... [Rest of the functions remain the same as in previous version, just copy them from above] ...
+
 def show_daily_checkin():
     """Daily health check-in page"""
     if 'user_id' not in st.session_state:
@@ -1124,100 +1142,38 @@ def show_diet_analysis():
         
         # Generate diet plan button
         if st.button("Generate Personalized Diet Plan", type="primary", use_container_width=True):
-            # Try to use agent system first
-            agent_result = None
-            agent_available = st.session_state.agent_bridge.is_available()
-            
-            if agent_available:
-                with st.spinner("🤖 AI Agent is analyzing your profile and creating a personalized plan..."):
-                    # Get profile and logs
-                    profile_dict = profile.to_dict()
-                    logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=7)
-                    logs_dict = logs if logs else []
-                    
-                    agent_result = st.session_state.agent_bridge.run_agent_analysis(
-                        agent_type='diet',
-                        profile=profile_dict,
-                        logs=logs_dict
-                    )
+            with st.spinner("🤖 AI is creating your personalized diet plan..."):
+                prompt = f"""
+                Create a detailed 7-day meal plan for:
                 
-                if agent_result and agent_result.get('success'):
-                    response = agent_result['output']
-                    metadata = agent_result.get('metadata', {})
-                else:
-                    # Fall back to direct LLM call with warning
-                    st.warning("⚠️ Agent analysis failed, using standard LLM...")
-                    with st.spinner("🤖 AI is creating your personalized diet plan..."):
-                        # Prepare fallback prompt
-                        prompt = f"""
-                        Create a detailed 7-day meal plan for:
-                        
-                        PERSONAL INFORMATION:
-                        - Name: {profile.name}
-                        - Age: {profile.age}
-                        - Weight: {profile.weight} kg
-                        - Height: {profile.height} cm
-                        - BMI: {profile.bmi} ({profile.bmi_category})
-                        - Diet Type: {profile.diet_type}
-                        - Fitness Goal: {profile.fitness_goal}
-                        - Activity Level: {profile.activity_level}
-                        - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
-                        
-                        PREFERENCES:
-                        - Preferred Cuisines: {', '.join(cuisine_pref)}
-                        - Max Cooking Time: {cooking_time}
-                        - Meal Prep: {'Yes' if meal_prep else 'No'}
-                        - Weekly Budget: ₹{budget}
-                        
-                        Please provide a personalized diet plan with exactly 7 days, each day independent.
-                        """
-                        response = st.session_state.llm.call_llm(prompt)
-                        metadata = {}
-            else:
-                # Use direct LLM call if agent not available
-                with st.spinner("🤖 AI is creating your personalized diet plan..."):
-                    prompt = f"""
-                    Create a detailed 7-day meal plan for:
-                    
-                    PERSONAL INFORMATION:
-                    - Name: {profile.name}
-                    - Age: {profile.age}
-                    - Weight: {profile.weight} kg
-                    - Height: {profile.height} cm
-                    - BMI: {profile.bmi} ({profile.bmi_category})
-                    - Diet Type: {profile.diet_type}
-                    - Fitness Goal: {profile.fitness_goal}
-                    - Activity Level: {profile.activity_level}
-                    - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
-                    
-                    PREFERENCES:
-                    - Preferred Cuisines: {', '.join(cuisine_pref)}
-                    - Max Cooking Time: {cooking_time}
-                    - Meal Prep: {'Yes' if meal_prep else 'No'}
-                    - Weekly Budget: ₹{budget}
-                    
-                    Please provide a personalized diet plan with exactly 7 days, each day independent.
-                    """
-                    response = st.session_state.llm.call_llm(prompt)
-                    metadata = {}
-            
-            st.session_state.diet_plan_response = response
-            st.session_state.diet_plan_metadata = metadata  # Store metadata for display
-            st.rerun()
+                PERSONAL INFORMATION:
+                - Name: {profile.name}
+                - Age: {profile.age}
+                - Weight: {profile.weight} kg
+                - Height: {profile.height} cm
+                - BMI: {profile.bmi} ({profile.bmi_category})
+                - Diet Type: {profile.diet_type}
+                - Fitness Goal: {profile.fitness_goal}
+                - Activity Level: {profile.activity_level}
+                - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
+                
+                PREFERENCES:
+                - Preferred Cuisines: {', '.join(cuisine_pref)}
+                - Max Cooking Time: {cooking_time}
+                - Meal Prep: {'Yes' if meal_prep else 'No'}
+                - Weekly Budget: ₹{budget}
+                
+                Please provide a personalized diet plan.
+                """
+                
+                response = st.session_state.llm.call_llm(prompt)
+                st.session_state.diet_plan_response = response
+                st.rerun()
     
     # Display response if available
     if st.session_state.diet_plan_response:
         st.markdown("### 📋 Your Personalized Diet Plan")
-        
-        # Display in a scrollable container
-        with st.container():
-            st.markdown('<div class="agent-output">', unsafe_allow_html=True)
-            st.markdown(st.session_state.diet_plan_response)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Display agent metadata if available
-        if hasattr(st.session_state, 'diet_plan_metadata') and st.session_state.diet_plan_metadata:
-            display_agent_metadata(st.session_state.diet_plan_metadata, "Diet Analysis")
+        st.markdown(st.session_state.diet_plan_response)
         
         # Download and regenerate buttons
         col1, col2 = st.columns(2)
@@ -1232,13 +1188,11 @@ def show_diet_analysis():
         with col2:
             if st.button("🔄 Generate Alternative", use_container_width=True):
                 st.session_state.diet_plan_response = None
-                st.session_state.diet_plan_metadata = None
                 st.rerun()
         
         # Clear response button
         if st.button("🧹 Clear Response", use_container_width=True):
             st.session_state.diet_plan_response = None
-            st.session_state.diet_plan_metadata = None
             st.rerun()
 
 def show_fitness_analysis():
@@ -1284,114 +1238,45 @@ def show_fitness_analysis():
             submitted = st.form_submit_button("Generate Workout Plan", use_container_width=True)
             
             if submitted:
-                # Try to use agent system first
-                agent_result = None
-                agent_available = st.session_state.agent_bridge.is_available()
-                
-                if agent_available:
-                    with st.spinner("🤖 AI Agent is creating your personalized workout plan..."):
-                        # Get profile and logs
-                        profile_dict = profile.to_dict()
-                        logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=7)
-                        logs_dict = logs if logs else []
-                        
-                        agent_result = st.session_state.agent_bridge.run_agent_analysis(
-                            agent_type='fitness',
-                            profile=profile_dict,
-                            logs=logs_dict
-                        )
+                with st.spinner("🤖 Creating your personalized workout plan..."):
+                    equipment = []
+                    if has_gym:
+                        equipment.append("Gym equipment")
+                    if has_weights:
+                        equipment.append("Dumbbells/weights")
+                    if has_yogamat:
+                        equipment.append("Yoga mat")
                     
-                    if agent_result and agent_result.get('success'):
-                        response = agent_result['output']
-                        metadata = agent_result.get('metadata', {})
-                    else:
-                        # Fall back to direct LLM call with warning
-                        st.warning("⚠️ Agent analysis failed, using standard LLM...")
-                        with st.spinner("🤖 Creating your personalized workout plan..."):
-                            # Prepare fallback prompt
-                            equipment = []
-                            if has_gym:
-                                equipment.append("Gym equipment")
-                            if has_weights:
-                                equipment.append("Dumbbells/weights")
-                            if has_yogamat:
-                                equipment.append("Yoga mat")
-                            
-                            prompt = f"""
-                            Create a personalized workout plan for:
-                            
-                            USER PROFILE:
-                            - Name: {profile.name}
-                            - Age: {profile.age}
-                            - Weight: {profile.weight} kg
-                            - Height: {profile.height} cm
-                            - Fitness Goal: {profile.fitness_goal}
-                            - Activity Level: {profile.activity_level}
-                            
-                            CURRENT FITNESS LEVEL:
-                            - Max Pushups: {pushups}
-                            - Plank Time: {plank_time} seconds
-                            - 5K Run Time: {running_5k} minutes
-                            - Flexibility: {flexibility}
-                            
-                            EQUIPMENT AVAILABLE: {', '.join(equipment) if equipment else 'None (bodyweight only)'}
-                            
-                            Please provide a personalized workout plan.
-                            """
-                            response = st.session_state.llm.call_llm(prompt)
-                            metadata = {}
-                else:
-                    # Use direct LLM call if agent not available
-                    with st.spinner("🤖 Creating your personalized workout plan..."):
-                        equipment = []
-                        if has_gym:
-                            equipment.append("Gym equipment")
-                        if has_weights:
-                            equipment.append("Dumbbells/weights")
-                        if has_yogamat:
-                            equipment.append("Yoga mat")
-                        
-                        prompt = f"""
-                        Create a personalized workout plan for:
-                        
-                        USER PROFILE:
-                        - Name: {profile.name}
-                        - Age: {profile.age}
-                        - Weight: {profile.weight} kg
-                        - Height: {profile.height} cm
-                        - Fitness Goal: {profile.fitness_goal}
-                        - Activity Level: {profile.activity_level}
-                        
-                        CURRENT FITNESS LEVEL:
-                        - Max Pushups: {pushups}
-                        - Plank Time: {plank_time} seconds
-                        - 5K Run Time: {running_5k} minutes
-                        - Flexibility: {flexibility}
-                        
-                        EQUIPMENT AVAILABLE: {', '.join(equipment) if equipment else 'None (bodyweight only)'}
-                        
-                        Please provide a personalized workout plan.
-                        """
-                        response = st.session_state.llm.call_llm(prompt)
-                        metadata = {}
-                
-                st.session_state.workout_plan_response = response
-                st.session_state.workout_plan_metadata = metadata
-                st.rerun()
+                    prompt = f"""
+                    Create a personalized workout plan for:
+                    
+                    USER PROFILE:
+                    - Name: {profile.name}
+                    - Age: {profile.age}
+                    - Weight: {profile.weight} kg
+                    - Height: {profile.height} cm
+                    - Fitness Goal: {profile.fitness_goal}
+                    - Activity Level: {profile.activity_level}
+                    
+                    CURRENT FITNESS LEVEL:
+                    - Max Pushups: {pushups}
+                    - Plank Time: {plank_time} seconds
+                    - 5K Run Time: {running_5k} minutes
+                    - Flexibility: {flexibility}
+                    
+                    EQUIPMENT AVAILABLE: {', '.join(equipment) if equipment else 'None (bodyweight only)'}
+                    
+                    Please provide a personalized workout plan.
+                    """
+                    
+                    response = st.session_state.llm.call_llm(prompt)
+                    st.session_state.workout_plan_response = response
+                    st.rerun()
     
     # Display response if available
     if st.session_state.workout_plan_response:
         st.markdown("### 🏋️ Your Personalized Workout Plan")
-        
-        # Display in a scrollable container
-        with st.container():
-            st.markdown('<div class="agent-output">', unsafe_allow_html=True)
-            st.markdown(st.session_state.workout_plan_response)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Display agent metadata if available
-        if hasattr(st.session_state, 'workout_plan_metadata') and st.session_state.workout_plan_metadata:
-            display_agent_metadata(st.session_state.workout_plan_metadata, "Fitness Analysis")
+        st.markdown(st.session_state.workout_plan_response)
         
         # Download and action buttons
         col1, col2 = st.columns(2)
@@ -1406,13 +1291,11 @@ def show_fitness_analysis():
         with col2:
             if st.button("🔄 Generate Alternative", use_container_width=True):
                 st.session_state.workout_plan_response = None
-                st.session_state.workout_plan_metadata = None
                 st.rerun()
         
         # Clear response button
         if st.button("🧹 Clear Response", use_container_width=True):
             st.session_state.workout_plan_response = None
-            st.session_state.workout_plan_metadata = None
             st.rerun()
 
 def show_health_analysis():
@@ -1439,146 +1322,63 @@ def show_health_analysis():
     # Only show generate button if we don't have a response yet
     if st.session_state.health_analysis_response is None:
         if st.button("Generate Comprehensive Health Analysis", type="primary", use_container_width=True):
-            # Get recent logs for context
-            logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=7)
-            
-            # Try to use agent system first
-            agent_result = None
-            agent_available = st.session_state.agent_bridge.is_available()
-            
-            if agent_available:
-                with st.spinner("🤖 AI Agent is analyzing your health profile..."):
-                    # Get profile and logs
-                    profile_dict = profile.to_dict()
-                    logs_dict = logs if logs else []
-                    
-                    agent_result = st.session_state.agent_bridge.run_agent_analysis(
-                        agent_type='health',
-                        profile=profile_dict,
-                        logs=logs_dict
-                    )
+            with st.spinner("🤖 Analyzing your health profile..."):
+                # Get recent logs for context
+                logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=7)
                 
-                if agent_result and agent_result.get('success'):
-                    response = agent_result['output']
-                    metadata = agent_result.get('metadata', {})
-                else:
-                    # Fall back to direct LLM call with warning
-                    st.warning("⚠️ Agent analysis failed, using standard LLM...")
-                    with st.spinner("🤖 Analyzing your health profile..."):
-                        # Calculate averages from logs
-                        avg_sleep = 7.0
-                        avg_energy = 5.0
-                        avg_mood = 5.0
-                        avg_stress = 5.0
-                        
-                        if logs:
-                            sleep_hours = [log.get('sleep_hours', 7) for log in logs]
-                            energy_levels = [log.get('energy_level', 5) for log in logs]
-                            mood_levels = [log.get('mood_level', 5) for log in logs]
-                            stress_levels = [log.get('stress_level', 5) for log in logs]
-                            
-                            if sleep_hours:
-                                avg_sleep = sum(sleep_hours) / len(sleep_hours)
-                            if energy_levels:
-                                avg_energy = sum(energy_levels) / len(energy_levels)
-                            if mood_levels:
-                                avg_mood = sum(mood_levels) / len(mood_levels)
-                            if stress_levels:
-                                avg_stress = sum(stress_levels) / len(stress_levels)
-                        
-                        # Prepare the prompt (for fallback)
-                        prompt = f"""
-                        Provide a comprehensive health and wellness analysis for:
-                        
-                        PERSONAL INFORMATION:
-                        - Name: {profile.name}
-                        - Age: {profile.age}
-                        - Weight: {profile.weight} kg
-                        - Height: {profile.height} cm
-                        - BMI: {profile.bmi} ({profile.bmi_category})
-                        - Diet Type: {profile.diet_type}
-                        - Fitness Goal: {profile.fitness_goal}
-                        - Activity Level: {profile.activity_level}
-                        - Medical Conditions: {', '.join(profile.medical_conditions) if profile.medical_conditions else 'None reported'}
-                        - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None reported'}
-                        
-                        RECENT HEALTH METRICS (7-day average):
-                        - Sleep: {avg_sleep:.1f} hours per night
-                        - Energy Level: {avg_energy:.1f}/10
-                        - Mood: {avg_mood:.1f}/10
-                        - Stress Level: {avg_stress:.1f}/10
-                        
-                        Please provide a health analysis.
-                        """
-                        response = st.session_state.llm.call_llm(prompt)
-                        metadata = {}
-            else:
-                # Use direct LLM call if agent not available
-                with st.spinner("🤖 Analyzing your health profile..."):
-                    # Calculate averages from logs
-                    avg_sleep = 7.0
-                    avg_energy = 5.0
-                    avg_mood = 5.0
-                    avg_stress = 5.0
+                # Calculate averages from logs
+                avg_sleep = 7.0
+                avg_energy = 5.0
+                avg_mood = 5.0
+                avg_stress = 5.0
+                
+                if logs:
+                    sleep_hours = [log.get('sleep_hours', 7) for log in logs]
+                    energy_levels = [log.get('energy_level', 5) for log in logs]
+                    mood_levels = [log.get('mood_level', 5) for log in logs]
+                    stress_levels = [log.get('stress_level', 5) for log in logs]
                     
-                    if logs:
-                        sleep_hours = [log.get('sleep_hours', 7) for log in logs]
-                        energy_levels = [log.get('energy_level', 5) for log in logs]
-                        mood_levels = [log.get('mood_level', 5) for log in logs]
-                        stress_levels = [log.get('stress_level', 5) for log in logs]
-                        
-                        if sleep_hours:
-                            avg_sleep = sum(sleep_hours) / len(sleep_hours)
-                        if energy_levels:
-                            avg_energy = sum(energy_levels) / len(energy_levels)
-                        if mood_levels:
-                            avg_mood = sum(mood_levels) / len(mood_levels)
-                        if stress_levels:
-                            avg_stress = sum(stress_levels) / len(stress_levels)
-                    
-                    prompt = f"""
-                    Provide a comprehensive health and wellness analysis for:
-                    
-                    PERSONAL INFORMATION:
-                    - Name: {profile.name}
-                    - Age: {profile.age}
-                    - Weight: {profile.weight} kg
-                    - Height: {profile.height} cm
-                    - BMI: {profile.bmi} ({profile.bmi_category})
-                    - Diet Type: {profile.diet_type}
-                    - Fitness Goal: {profile.fitness_goal}
-                    - Activity Level: {profile.activity_level}
-                    - Medical Conditions: {', '.join(profile.medical_conditions) if profile.medical_conditions else 'None reported'}
-                    - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None reported'}
-                    
-                    RECENT HEALTH METRICS (7-day average):
-                    - Sleep: {avg_sleep:.1f} hours per night
-                    - Energy Level: {avg_energy:.1f}/10
-                    - Mood: {avg_mood:.1f}/10
-                    - Stress Level: {avg_stress:.1f}/10
-                    
-                    Please provide a health analysis.
-                    """
-                    response = st.session_state.llm.call_llm(prompt)
-                    metadata = {}
-            
-            st.session_state.health_analysis_response = response
-            st.session_state.health_analysis_metadata = metadata
-            st.rerun()
+                    if sleep_hours:
+                        avg_sleep = sum(sleep_hours) / len(sleep_hours)
+                    if energy_levels:
+                        avg_energy = sum(energy_levels) / len(energy_levels)
+                    if mood_levels:
+                        avg_mood = sum(mood_levels) / len(mood_levels)
+                    if stress_levels:
+                        avg_stress = sum(stress_levels) / len(stress_levels)
+                
+                prompt = f"""
+                Provide a comprehensive health and wellness analysis for:
+                
+                PERSONAL INFORMATION:
+                - Name: {profile.name}
+                - Age: {profile.age}
+                - Weight: {profile.weight} kg
+                - Height: {profile.height} cm
+                - BMI: {profile.bmi} ({profile.bmi_category})
+                - Diet Type: {profile.diet_type}
+                - Fitness Goal: {profile.fitness_goal}
+                - Activity Level: {profile.activity_level}
+                - Medical Conditions: {', '.join(profile.medical_conditions) if profile.medical_conditions else 'None reported'}
+                - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None reported'}
+                
+                RECENT HEALTH METRICS (7-day average):
+                - Sleep: {avg_sleep:.1f} hours per night
+                - Energy Level: {avg_energy:.1f}/10
+                - Mood: {avg_mood:.1f}/10
+                - Stress Level: {avg_stress:.1f}/10
+                
+                Please provide a health analysis.
+                """
+                
+                response = st.session_state.llm.call_llm(prompt)
+                st.session_state.health_analysis_response = response
+                st.rerun()
     
     # Display response if available
     if st.session_state.health_analysis_response:
         st.markdown("### 📊 Your Health & Wellness Analysis")
-        
-        # Display in a scrollable container
-        with st.container():
-            st.markdown('<div class="agent-output">', unsafe_allow_html=True)
-            st.markdown(st.session_state.health_analysis_response)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Display agent metadata if available
-        if hasattr(st.session_state, 'health_analysis_metadata') and st.session_state.health_analysis_metadata:
-            display_agent_metadata(st.session_state.health_analysis_metadata, "Health Analysis")
+        st.markdown(st.session_state.health_analysis_response)
         
         # Download and action buttons
         col1, col2 = st.columns(2)
@@ -1593,13 +1393,11 @@ def show_health_analysis():
         with col2:
             if st.button("🔄 Generate Alternative", use_container_width=True):
                 st.session_state.health_analysis_response = None
-                st.session_state.health_analysis_metadata = None
                 st.rerun()
         
         # Clear response button
         if st.button("🧹 Clear Response", use_container_width=True):
             st.session_state.health_analysis_response = None
-            st.session_state.health_analysis_metadata = None
             st.rerun()
 
 def show_mess_menu_upload():
@@ -1813,138 +1611,58 @@ def show_mess_optimizer():
             submitted = st.form_submit_button("Generate Optimization Plan", use_container_width=True)
             
             if submitted:
-                # Get recent logs for context
-                logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=3)
-                
-                # Try to use agent system first
-                agent_result = None
-                agent_available = st.session_state.agent_bridge.is_available()
-                
-                if agent_available:
-                    with st.spinner("🤖 AI Agent is optimizing your mess meals..."):
-                        # Get profile and logs
-                        profile_dict = profile.to_dict()
-                        logs_dict = logs if logs else []
-                        
-                        agent_result = st.session_state.agent_bridge.run_agent_analysis(
-                            agent_type='mess_optimizer',
-                            profile=profile_dict,
-                            logs=logs_dict,
-                            mess_menu=menu
-                        )
+                with st.spinner("🤖 Optimizing your mess meals..."):
+                    # Get recent logs for context
+                    logs = st.session_state.db.get_user_logs(st.session_state.user_id, days=3)
+                    recent_energy = 5
+                    if logs:
+                        recent_energy = sum(log.get('energy_level', 5) for log in logs) / len(logs)
                     
-                    if agent_result and agent_result.get('success'):
-                        response = agent_result['output']
-                        metadata = agent_result.get('metadata', {})
-                    else:
-                        # Fall back to direct LLM call with warning
-                        st.warning("⚠️ Agent analysis failed, using standard LLM...")
-                        with st.spinner("🤖 Optimizing your mess meals..."):
-                            # Prepare fallback prompt
-                            recent_energy = 5
-                            if logs:
-                                recent_energy = sum(log.get('energy_level', 5) for log in logs) / len(logs)
-                            
-                            prompt = f"""
-                            Optimize today's mess meals for:
-                            
-                            USER PROFILE:
-                            - Name: {profile.name}
-                            - Diet Type: {profile.diet_type}
-                            - Fitness Goal: {profile.fitness_goal}
-                            - Weight: {profile.weight} kg
-                            - Weekly Budget: ₹{profile.weekly_budget}
-                            - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
-                            
-                            OPTIMIZATION GOAL: {optimize_for}
-                            FOCUS MEALS: {', '.join(meal_pref)}
-                            RECENT ENERGY LEVEL: {recent_energy:.1f}/10
-                            
-                            CONSTRAINTS:
-                            - Max Calories per Meal: {max_calories}
-                            - Min Protein per Meal: {min_protein}g
-                            - Items to Avoid: {avoid_items if avoid_items else 'None'}
-                            - Extra Supplement Budget: ₹{extra_budget}
-                            
-                            TODAY'S MESS MENU:
-                            BREAKFAST: {', '.join(menu.get('breakfast', []))}
-                            Breakfast Notes: {menu.get('breakfast_notes', 'None')}
-                            
-                            LUNCH: {', '.join(menu.get('lunch', []))}
-                            Lunch Notes: {menu.get('lunch_notes', 'None')}
-                            
-                            DINNER: {', '.join(menu.get('dinner', []))}
-                            Dinner Notes: {menu.get('dinner_notes', 'None')}
-                            
-                            General Notes: {menu.get('general_notes', 'None')}
-                            
-                            Please provide mess meal optimization.
-                            """
-                            response = st.session_state.llm.call_llm(prompt)
-                            metadata = {}
-                else:
-                    # Use direct LLM call if agent not available
-                    with st.spinner("🤖 Optimizing your mess meals..."):
-                        recent_energy = 5
-                        if logs:
-                            recent_energy = sum(log.get('energy_level', 5) for log in logs) / len(logs)
-                        
-                        prompt = f"""
-                        Optimize today's mess meals for:
-                        
-                        USER PROFILE:
-                        - Name: {profile.name}
-                        - Diet Type: {profile.diet_type}
-                        - Fitness Goal: {profile.fitness_goal}
-                        - Weight: {profile.weight} kg
-                        - Weekly Budget: ₹{profile.weekly_budget}
-                        - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
-                        
-                        OPTIMIZATION GOAL: {optimize_for}
-                        FOCUS MEALS: {', '.join(meal_pref)}
-                        RECENT ENERGY LEVEL: {recent_energy:.1f}/10
-                        
-                        CONSTRAINTS:
-                        - Max Calories per Meal: {max_calories}
-                        - Min Protein per Meal: {min_protein}g
-                        - Items to Avoid: {avoid_items if avoid_items else 'None'}
-                        - Extra Supplement Budget: ₹{extra_budget}
-                        
-                        TODAY'S MESS MENU:
-                        BREAKFAST: {', '.join(menu.get('breakfast', []))}
-                        Breakfast Notes: {menu.get('breakfast_notes', 'None')}
-                        
-                        LUNCH: {', '.join(menu.get('lunch', []))}
-                        Lunch Notes: {menu.get('lunch_notes', 'None')}
-                        
-                        DINNER: {', '.join(menu.get('dinner', []))}
-                        Dinner Notes: {menu.get('dinner_notes', 'None')}
-                        
-                        General Notes: {menu.get('general_notes', 'None')}
-                        
-                        Please provide mess meal optimization.
-                        """
-                        response = st.session_state.llm.call_llm(prompt)
-                        metadata = {}
-                
-                st.session_state.mess_optimization_response = response
-                st.session_state.mess_optimization_metadata = metadata
-                st.session_state.mess_optimization_date = date_str
-                st.rerun()
+                    prompt = f"""
+                    Optimize today's mess meals for:
+                    
+                    USER PROFILE:
+                    - Name: {profile.name}
+                    - Diet Type: {profile.diet_type}
+                    - Fitness Goal: {profile.fitness_goal}
+                    - Weight: {profile.weight} kg
+                    - Weekly Budget: ₹{profile.weekly_budget}
+                    - Allergies: {', '.join(profile.allergies) if profile.allergies else 'None'}
+                    
+                    OPTIMIZATION GOAL: {optimize_for}
+                    FOCUS MEALS: {', '.join(meal_pref)}
+                    RECENT ENERGY LEVEL: {recent_energy:.1f}/10
+                    
+                    CONSTRAINTS:
+                    - Max Calories per Meal: {max_calories}
+                    - Min Protein per Meal: {min_protein}g
+                    - Items to Avoid: {avoid_items if avoid_items else 'None'}
+                    - Extra Supplement Budget: ₹{extra_budget}
+                    
+                    TODAY'S MESS MENU:
+                    BREAKFAST: {', '.join(menu.get('breakfast', []))}
+                    Breakfast Notes: {menu.get('breakfast_notes', 'None')}
+                    
+                    LUNCH: {', '.join(menu.get('lunch', []))}
+                    Lunch Notes: {menu.get('lunch_notes', 'None')}
+                    
+                    DINNER: {', '.join(menu.get('dinner', []))}
+                    Dinner Notes: {menu.get('dinner_notes', 'None')}
+                    
+                    General Notes: {menu.get('general_notes', 'None')}
+                    
+                    Please provide mess meal optimization.
+                    """
+                    
+                    response = st.session_state.llm.call_llm(prompt)
+                    st.session_state.mess_optimization_response = response
+                    st.session_state.mess_optimization_date = date_str
+                    st.rerun()
     
     # Display response if available
     if st.session_state.mess_optimization_response:
         st.markdown("### 🍽️ Your Optimized Mess Plan")
-        
-        # Display in a scrollable container
-        with st.container():
-            st.markdown('<div class="agent-output">', unsafe_allow_html=True)
-            st.markdown(st.session_state.mess_optimization_response)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Display agent metadata if available
-        if hasattr(st.session_state, 'mess_optimization_metadata') and st.session_state.mess_optimization_metadata:
-            display_agent_metadata(st.session_state.mess_optimization_metadata, "Mess Optimization")
+        st.markdown(st.session_state.mess_optimization_response)
         
         # Download and action buttons
         col1, col2, col3 = st.columns(3)
@@ -1959,13 +1677,11 @@ def show_mess_optimizer():
         with col2:
             if st.button("🔄 Re-optimize", use_container_width=True):
                 st.session_state.mess_optimization_response = None
-                st.session_state.mess_optimization_metadata = None
                 st.rerun()
         
         with col3:
             if st.button("🧹 Clear Response", use_container_width=True):
                 st.session_state.mess_optimization_response = None
-                st.session_state.mess_optimization_metadata = None
                 st.rerun()
 
 def show_profile_management():
@@ -2234,7 +1950,7 @@ def show_profile_management():
                     
                     # Clear user session
                     for key in list(st.session_state.keys()):
-                        if key not in ['db', 'llm', 'agent_bridge', 'selected_page']:
+                        if key not in ['db', 'llm', 'selected_page']:
                             del st.session_state[key]
                     
                     st.session_state.selected_page = "👤 Profile Setup"
@@ -2256,12 +1972,6 @@ def show_about():
     
     ### ✨ Key Features
     
-    **🤖 Autonomous TAO Agents**
-    - **Think-Act-Observe** framework for deep reasoning
-    - Diet, fitness, health, and mess optimization agents
-    - Dynamic iteration based on data quality
-    - Transparent reasoning traces
-    
     **👤 Profile Management**
     - Create detailed health profiles
     - Track BMI and health metrics
@@ -2274,10 +1984,9 @@ def show_about():
     - Monitor progress over time
     
     **🍽️ Diet & Nutrition**
-    - Personalized 7-day meal plans
-    - Daily nutritional targets
-    - Concise web-optimized outputs
-    - Diet-type specific recommendations
+    - Personalized meal plans based on your diet type
+    - Grocery shopping lists and recipes
+    - Calorie and macronutrient targets
     
     **💪 Fitness & Exercise**
     - Custom workout plans for your fitness goals
@@ -2298,8 +2007,7 @@ def show_about():
     
     ### 🛠️ Technology Stack
     - **Frontend**: Streamlit (Python web framework)
-    - **AI Engine**: Groq API with Llama 3.1 model
-    - **Agent Framework**: LangGraph with TAO (Think-Act-Observe) loops
+    - **AI Engine**: Groq API with Llama 3.1 model (or mock responses)
     - **Data Storage**: Local JSON files
     - **Visualization**: Streamlit charts and metrics
     
@@ -2312,15 +2020,8 @@ def show_about():
     1. **Without API Key**: Runs with mock responses
     2. **With API Key**: 
        - Get Groq API key from: https://console.groq.com/keys
-       - Install: pip install langchain-groq langgraph pydantic
+       - Install: pip install langchain-groq
        - Enter API key when prompted in the app
-    
-    ### 🏆 Agentic System Features
-    - **Autonomous Reasoning**: Agents decide their own analysis depth
-    - **Goal-Oriented Behavior**: Each agent pursues specific health objectives
-    - **Multi-Step Planning**: Complex analysis broken into thinking steps
-    - **Adaptive Learning**: Agents learn from previous iterations
-    - **Transparent Decision Making**: Full reasoning traces available
     
     ### 📄 License
     This software is provided for educational and personal use.
@@ -2333,4 +2034,3 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
         st.info("Please refresh the page or check your connection.")
-
