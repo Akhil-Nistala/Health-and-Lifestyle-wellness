@@ -1,6 +1,23 @@
-streamlit
-python-dotenv
-pandas
-plotly
-langchain-groq
-langchain-core
+# Core Application Dependencies
+streamlit>=1.28.0
+python-dotenv>=1.0.0
+pandas>=2.1.0
+
+# AI Agent Framework
+langchain>=0.0.340
+langchain-groq>=0.1.1
+langgraph>=0.0.20
+langchain-core>=0.1.8
+
+# Groq LLM API
+groq>=0.3.0
+
+# Data Models
+pydantic>=2.5.0
+
+# Date/Time
+python-dateutil>=2.8.2
+
+# Optional: Alternative LLM providers (choose one)
+# openai>=0.28.0  # For GPT models
+# anthropic>=0.18.0  # For Claude models
