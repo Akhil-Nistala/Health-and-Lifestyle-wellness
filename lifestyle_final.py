@@ -332,14 +332,16 @@ class AgentState(TypedDict):
     final_output: List[str]
     confidence: float
     metadata: Dict[str, Any]
-    mess_menu: Optional[Dict[str, Any]] = None  # Added for mess optimizer
+    mess_menu: Optional[Dict[str, Any]] = None
+    execution_mode: str = "cli"  # NEW: Track execution mode
 
 class TAOAgent:
     """Base agent with Think-Act-Observe framework"""
     
-    def __init__(self, agent_type: str, llm_service: LLMService):
+    def __init__(self, agent_type: str, llm_service: LLMService, execution_mode: str = "cli"):
         self.agent_type = agent_type
         self.llm = llm_service
+        self.execution_mode = execution_mode  # NEW: Track execution mode
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -437,16 +439,21 @@ class TAOAgent:
             
             state["confidence"] = new_confidence
             
-            max_reached = state["iteration"] >= state["max_iterations"] - 1
-            high_satisfaction = satisfaction >= 0.8
-            low_confidence = new_confidence < 0.3 and state["iteration"] >= 2
-            
-            state["should_continue"] = (
-                observation.get("should_continue", False) and 
-                not max_reached and 
-                not high_satisfaction and 
-                not low_confidence
-            )
+            # CRITICAL FIX: Diet agent runs exactly ONE iteration
+            if self.agent_type == "diet":
+                state["should_continue"] = False
+                print(f"🤖 Diet agent: Stopping after 1 iteration (web-optimized)")
+            else:
+                max_reached = state["iteration"] >= state["max_iterations"] - 1
+                high_satisfaction = satisfaction >= 0.8
+                low_confidence = new_confidence < 0.3 and state["iteration"] >= 2
+                
+                state["should_continue"] = (
+                    observation.get("should_continue", False) and 
+                    not max_reached and 
+                    not high_satisfaction and 
+                    not low_confidence
+                )
             
         except Exception as e:
             state["should_continue"] = state["iteration"] < 1
@@ -499,6 +506,7 @@ class TAOAgent:
     def _build_act_prompt(self, state: AgentState) -> str:
         """Build ACT phase prompt"""
         goal = state.get("current_goal", "analyze_patterns")
+        execution_mode = state.get("execution_mode", "cli")
         
         prompt_templates = {
             "diet": self._diet_act_prompt,
@@ -508,7 +516,7 @@ class TAOAgent:
         }
         
         template = prompt_templates.get(self.agent_type, self._generic_act_prompt)
-        return template(state, goal)
+        return template(state, goal, execution_mode)
     
     def _build_observe_prompt(self, state: AgentState) -> str:
         """Build OBSERVE phase prompt"""
@@ -536,9 +544,11 @@ class TAOAgent:
         """
     
     # Agent-specific prompt templates
-    def _diet_act_prompt(self, state: AgentState, goal: str) -> str:
+    def _diet_act_prompt(self, state: AgentState, goal: str, execution_mode: str) -> str:
         profile = state["profile"]
         logs = state["recent_logs"]
+        
+        mode_note = "WEB MODE" if execution_mode == "web" else "CLI MODE"
         
         return f"""
         As a DIET AND NUTRITION expert, create a personalized diet plan.
@@ -558,51 +568,58 @@ class TAOAgent:
         Average energy level: {sum(log.get('energy_level', 5) for log in logs) / max(len(logs), 1):.1f}/10
         
         CURRENT ANALYSIS FOCUS: {goal}
+        EXECUTION MODE: {mode_note}
         
-        CREATE A DETAILED 7-DAY MEAL PLAN WITH THE FOLLOWING SECTIONS:
+        CRITICAL INSTRUCTIONS:
+        1. Provide exactly 7 days (Day 1 through Day 7)
+        2. Each day must be a complete, independent daily plan
+        3. NO weekly summaries or merged nutrition targets
+        4. Each day must have identical structure
+        5. Keep outputs concise for web display
         
-        1. DAILY MEAL STRUCTURE:
-           - Breakfast (time, specific foods, portion sizes)
-           - Lunch (time, specific foods, portion sizes)
-           - Dinner (time, specific foods, portion sizes)
-           - 2 Snacks (timing and suggestions)
+        CREATE A DETAILED 7-DAY MEAL PLAN WITH THE FOLLOWING STRUCTURE:
         
-        2. NUTRITIONAL TARGETS:
-           - Daily calorie target based on {profile.get('weight', 70)}kg weight
-           - Protein: __ grams per day
-           - Carbohydrates: __ grams per day
-           - Fats: __ grams per day
-           - Key micronutrients to focus on
+        1. DAILY MEAL STRUCTURE (REQUIRED FOR ALL DAYS):
+        For EACH day (Day 1 through Day 7):
+        - Breakfast (time, specific foods, portion sizes)
+        - Lunch (time, specific foods, portion sizes)
+        - Dinner (time, specific foods, portion sizes)
+        - 2 Snacks (timing and suggestions)
         
-        3. RECIPES AND PREPARATION:
-           - 3 simple recipes for {profile.get('diet_type', 'mixed')} diet
-           - Cooking instructions
-           - Meal prep tips
-           - Time-saving strategies
+        2. NUTRITIONAL TARGETS PER DAY (REQUIRED):
+        For EACH day:
+        - Daily calorie target: ____ calories
+        - Protein: ____ grams
+        - Carbohydrates: ____ grams
+        - Fats: ____ grams
+        - Key micronutrients focus: ____
         
-        4. GROCERY SHOPPING LIST:
-           - Organized by category (produce, proteins, grains, etc.)
-           - Quantities for 1 week
-           - Estimated cost
-           - Budget-friendly alternatives
+        {"3. ADDITIONAL SECTIONS FOR CLI MODE ONLY (SKIP IN WEB MODE):" if execution_mode == "cli" else "3. WEB MODE: Keep output concise"}
+        {"   - 3 simple recipes for " + profile.get('diet_type', 'mixed') + " diet" if execution_mode == "cli" else ""}
+        {"   - Cooking instructions" if execution_mode == "cli" else ""}
+        {"   - Meal prep tips" if execution_mode == "cli" else ""}
+        {"   - Grocery shopping list (organized by category)" if execution_mode == "cli" else ""}
+        {"   - Estimated cost" if execution_mode == "cli" else ""}
+        {"   - Progress tracking guidelines" if execution_mode == "cli" else ""}
         
-        5. SPECIAL CONSIDERATIONS:
-           - How to handle eating out
-           - Healthy snack options
-           - Hydration plan
-           - Cheat meal strategy
+        4. FORMATTING RULES:
+        - Use clear headers: "DAY 1:", "DAY 2:", etc.
+        - Use bullet points for readability
+        - Keep each day's section self-contained
+        - Do NOT create weekly summaries
+        - Do NOT merge nutrition data across days
         
-        6. PROGRESS TRACKING:
-           - What to monitor daily
-           - Weekly check-in points
-           - How to adjust based on results
+        FAILURE CONDITIONS (AVOID THESE):
+        - DO NOT create weekly summaries
+        - DO NOT merge nutrition targets across days
+        - DO NOT skip daily nutritional targets
+        - DO NOT create vague or incomplete daily plans
         
         Make it SPECIFIC, PRACTICAL, and TAILORED to {profile.get('diet_type', 'mixed')} diet.
-        Include exact foods, portions, and timing.
-        Provide clear, actionable steps.
+        Provide clear, actionable steps for each day.
         """
     
-    def _fitness_act_prompt(self, state: AgentState, goal: str) -> str:
+    def _fitness_act_prompt(self, state: AgentState, goal: str, execution_mode: str) -> str:
         profile = state["profile"]
         logs = state["recent_logs"]
         
@@ -666,29 +683,12 @@ class TAOAgent:
            - Deload week schedule
            - Plateaus prevention
         
-        7. HOME WORKOUT ALTERNATIVES:
-           - No-equipment exercises
-           - Minimal space requirements
-           - Household items as equipment
-        
-        8. SAFETY AND INJURY PREVENTION:
-           - Warning signs to watch for
-           - Proper recovery strategies
-           - When to skip a workout
-           - Form check guidelines
-        
-        9. TRACKING AND MONITORING:
-           - Workout log template
-           - Performance metrics
-           - Recovery indicators
-           - Weekly progress assessment
-        
         Make it SPECIFIC with exact exercises, sets, reps, and rest times.
         Focus on SAFETY and PROPER FORM.
         Include both GYM and HOME options.
         """
     
-    def _health_act_prompt(self, state: AgentState, goal: str) -> str:
+    def _health_act_prompt(self, state: AgentState, goal: str, execution_mode: str) -> str:
         profile = state["profile"]
         logs = state["recent_logs"]
         
@@ -727,50 +727,22 @@ class TAOAgent:
            - Sleep quality assessment
            - Impact on daily energy
            - Specific improvement suggestions
-           - Ideal sleep schedule recommendation
         
         3. NUTRITION ASSESSMENT:
            - Current eating pattern analysis
            - Nutrient intake estimation
            - Potential deficiencies
            - Meal timing optimization
-           - Hydration status
         
         4. ACTIVITY AND EXERCISE EVALUATION:
            - Current activity level analysis
            - Exercise consistency
            - Recovery adequacy
-           - Balance of different exercise types
         
-        5. MENTAL AND EMOTIONAL WELL-BEING:
-           - Stress pattern analysis
-           - Mood trends
-           - Coping mechanisms assessment
-           - Work-life balance evaluation
-        
-        6. RISK FACTOR ANALYSIS:
-           - Lifestyle risk factors identified
-           - Health risk timeline (short/medium/long term)
-           - Preventive measures priority list
-           - Warning signs to monitor
-        
-        7. ACTIONABLE RECOMMENDATIONS:
+        5. ACTIONABLE RECOMMENDATIONS:
            - Top 3 immediate changes to make
            - Weekly improvement plan
            - Daily health habits to establish
-           - Monitoring system setup
-        
-        8. INTEGRATED WELLNESS PLAN:
-           - Daily routine optimization
-           - Weekly check-in points
-           - Monthly assessment criteria
-           - Seasonal adjustment suggestions
-        
-        9. WHEN TO SEEK PROFESSIONAL HELP:
-           - Red flags to watch for
-           - Recommended health screenings
-           - Specialist referrals if needed
-           - Emergency warning signs
         
         IMPORTANT: Do not provide medical diagnosis.
         Focus on LIFESTYLE IMPROVEMENTS and PREVENTIVE MEASURES.
@@ -778,7 +750,7 @@ class TAOAgent:
         Include CLEAR, MEASURABLE goals.
         """
     
-    def _mess_optimizer_act_prompt(self, state: AgentState, goal: str) -> str:
+    def _mess_optimizer_act_prompt(self, state: AgentState, goal: str, execution_mode: str) -> str:
         """Mess optimizer specific prompt"""
         profile = state["profile"]
         mess_menu = state.get("mess_menu", {})
@@ -834,47 +806,15 @@ class TAOAgent:
            - How to combine items for complete protein
            - Target: {profile.get('weight', 70) * 1.2:.0f}g protein/day recommendation
         
-        4. CALORIE & MACRO MANAGEMENT:
-           - Estimated calories from selected items
-           - How to adjust portions for {profile.get('fitness_goal', 'general health')}
-           - Carb management for energy
-           - Healthy fat sources in mess
-        
-        5. SUPPLEMENTATION PLAN (Budget: ₹{profile.get('weekly_budget', 500)}):
-           - Essential supplements to buy TODAY
-           - Exact quantities and approximate prices
-           - How to incorporate with mess food
-           - Storage tips for hostel
-        
-        6. MEAL ENHANCEMENT HACKS:
+        4. MEAL ENHANCEMENT HACKS:
            - Simple additions to improve nutrition
            - Flavor enhancement without extra calories
            - How to make bland items more nutritious
-           - Portion control techniques
         
-        7. SAMPLE MEAL PLATE:
-           Visual representation of ideal plate:
-           - 50%: ______ (vegetables/salad)
-           - 25%: ______ (protein source)
-           - 25%: ______ (carbs)
-           - Add: ______ (supplements/extras)
-        
-        8. TIMING & COMBINATIONS:
-           - Best time to eat this meal
-           - What to eat before/after workout
-           - How to space this meal with others
-           - Hydration plan with meal
-        
-        9. COST-BENEFIT ANALYSIS:
+        5. COST-BENEFIT ANALYSIS:
            - Cost of selected mess items
            - Cost of supplements
            - Total nutritional value achieved
-           - Value for money score
-        
-        10. ALTERNATIVES IF ITEMS UNAVAILABLE:
-            - Backup options from mess
-            - Quick hostel room alternatives
-            - Budget-friendly replacements
         
         Be VERY SPECIFIC with Indian hostel context.
         Include exact food names from the menu.
@@ -882,7 +822,7 @@ class TAOAgent:
         Consider LIMITED COOKING FACILITIES in hostel.
         """
     
-    def _generic_act_prompt(self, state: AgentState, goal: str) -> str:
+    def _generic_act_prompt(self, state: AgentState, goal: str, execution_mode: str) -> str:
         return f"""
         You are a {self.agent_type} health advisor. Provide detailed, personalized guidance.
         
@@ -923,14 +863,17 @@ class TAOAgent:
             "metadata": {
                 "agent_type": self.agent_type,
                 "start_time": datetime.now().isoformat(),
-                "data_points": len(logs)
+                "data_points": len(logs),
+                "execution_mode": self.execution_mode
             },
-            "mess_menu": mess_menu  # Add mess menu to state
+            "mess_menu": mess_menu,
+            "execution_mode": self.execution_mode  # Pass execution mode to state
         }
         
         try:
             final_state = self.graph.invoke(initial_state)
             
+            # GUARANTEED RETURN BLOCK - Always returns structured dictionary
             final_output = ""
             if isinstance(final_state.get("final_output"), list) and final_state["final_output"]:
                 if len(final_state["final_output"]) == 1:
@@ -940,6 +883,7 @@ class TAOAgent:
             else:
                 final_output = "No detailed analysis generated. Please try again with more data."
             
+            # Always return structured response
             return {
                 "success": True,
                 "agent_type": self.agent_type,
@@ -962,28 +906,39 @@ class TAOAgent:
             }
             
         except Exception as e:
+            # Error handling with guaranteed return
             return {
                 "success": False,
                 "error": str(e),
                 "agent_type": self.agent_type,
-                "iterations": initial_state.get("iteration", 0)
+                "output": f"Agent execution failed: {str(e)[:100]}",
+                "iterations": initial_state.get("iteration", 0),
+                "max_iterations": actual_max,
+                "confidence": 0.0,
+                "reasoning_summary": [],
+                "metadata": {
+                    "agent_type": self.agent_type,
+                    "error": str(e),
+                    "end_time": datetime.now().isoformat()
+                }
             }
 
 # ---------------- MAIN APPLICATION ------------------
 class HealthAISystem:
     """Main production system"""
     
-    def __init__(self):
+    def __init__(self, execution_mode: str = "cli"):
         self.db = DatabaseManager()
+        self.execution_mode = execution_mode  # Track execution mode
         try:
             self.llm_service = LLMService()
             
-            # Initialize agents
+            # Initialize agents with execution mode
             self.agents = {
-                "diet": TAOAgent("diet", self.llm_service),
-                "fitness": TAOAgent("fitness", self.llm_service),
-                "health": TAOAgent("health", self.llm_service),
-                "mess_optimizer": TAOAgent("mess_optimizer", self.llm_service)
+                "diet": TAOAgent("diet", self.llm_service, execution_mode),
+                "fitness": TAOAgent("fitness", self.llm_service, execution_mode),
+                "health": TAOAgent("health", self.llm_service, execution_mode),
+                "mess_optimizer": TAOAgent("mess_optimizer", self.llm_service, execution_mode)
             }
         except Exception as e:
             print(f"❌ Failed to initialize LLM service: {e}")
@@ -992,8 +947,24 @@ class HealthAISystem:
         
         self.current_user_id = None
     
+    def safe_input(self, prompt: str) -> str:
+        """Safe input that works in both CLI and web modes"""
+        if self.execution_mode == "web":
+            # In web mode, return default or empty
+            # For boolean choices, default to no/empty
+            if prompt.lower().startswith("save") or "? (y/n)" in prompt.lower():
+                return "n"
+            if "select:" in prompt.lower():
+                return ""  # Let main menu handle default
+            return ""
+        return input(prompt).strip()
+    
     def setup_profile(self) -> bool:
         """Comprehensive profile setup"""
+        if self.execution_mode == "web":
+            print("Web mode: Profile setup handled by Streamlit UI")
+            return False
+        
         print("\n" + "="*60)
         print("👤 USER PROFILE SETUP")
         print("="*60)
@@ -1148,7 +1119,7 @@ class HealthAISystem:
         }
         
         while True:
-            choice = input("\nChoose (1-3): ").strip()
+            choice = self.safe_input("\nChoose (1-3): ")
             if choice in meal_map:
                 meal_time = meal_map[choice]
                 break
@@ -1157,7 +1128,7 @@ class HealthAISystem:
         print(f"\n📝 Enter {meal_time} menu items (one per line, type 'done' when finished):")
         items = []
         while True:
-            item = input(f"Item {len(items) + 1}: ").strip()
+            item = self.safe_input(f"Item {len(items) + 1}: ")
             if item.lower() == 'done':
                 if len(items) == 0:
                     print("Please enter at least one item")
@@ -1166,7 +1137,7 @@ class HealthAISystem:
             if item:
                 items.append(item)
         
-        notes = input("\nAdditional notes (e.g., 'limited quantity', 'extra spicy'): ").strip()
+        notes = self.safe_input("\nAdditional notes (e.g., 'limited quantity', 'extra spicy'): ")
         
         menu_id = f"menu_{today}_{meal_time}_{self.current_user_id}"
         menu = MessMenu(
@@ -1217,7 +1188,7 @@ class HealthAISystem:
         
         while True:
             try:
-                choice = int(input(f"\nSelect menu to optimize (1-{len(today_menus) + 1}): ").strip())
+                choice = int(self.safe_input(f"\nSelect menu to optimize (1-{len(today_menus) + 1}): "))
                 if 1 <= choice <= len(today_menus) + 1:
                     break
                 print(f"Please enter 1-{len(today_menus) + 1}")
@@ -1271,8 +1242,8 @@ class HealthAISystem:
                 })
                 
                 # Ask to save
-                save = input(f"\n💾 Save {menu.meal_time} optimization? (y/n): ").strip().lower()
-                if save == 'y':
+                save = self.safe_input(f"\n💾 Save {menu.meal_time} optimization? (y/n): ")
+                if save.lower() == 'y':
                     self._save_mess_optimization(result, profile.name, menu.meal_time, menu.items)
             else:
                 print(f"❌ Optimization failed for {menu.meal_time}: {result.get('error', 'Unknown error')}")
@@ -1360,8 +1331,8 @@ AGENT REASONING:
         print(f"Budget remaining: ₹{max(0, 500 - total_supplement_cost)}")
         
         # Save summary
-        save = input("\n💾 Save daily summary? (y/n): ").strip().lower()
-        if save == 'y':
+        save = self.safe_input("\n💾 Save daily summary? (y/n): ")
+        if save.lower() == 'y':
             self._save_daily_summary(results, username, total_protein_estimate, total_calorie_estimate, total_supplement_cost)
     
     def _save_daily_summary(self, results: List[Dict], username: str, total_protein: int, total_calories: int, total_cost: int):
@@ -1421,7 +1392,7 @@ MEAL-BY-MEAL ANALYSIS:
         print("="*60)
         
         today = datetime.now().strftime("%Y-%m-%d")
-        date_input = input(f"Date (YYYY-MM-DD) [Today: {today}]: ").strip()
+        date_input = self.safe_input(f"Date (YYYY-MM-DD) [Today: {today}]: ")
         if not date_input:
             date_input = today
         
@@ -1435,8 +1406,8 @@ MEAL-BY-MEAL ANALYSIS:
         
         existing = self.db.get_log_by_date(self.current_user_id, date_input)
         if existing:
-            overwrite = input(f"Log exists for {date_input}. Overwrite? (y/n): ").strip().lower()
-            if overwrite != 'y':
+            overwrite = self.safe_input(f"Log exists for {date_input}. Overwrite? (y/n): ")
+            if overwrite.lower() != 'y':
                 return
         
         log_id = f"log_{date_input}_{self.current_user_id}"
@@ -1447,14 +1418,14 @@ MEAL-BY-MEAL ANALYSIS:
         print("\n😴 SLEEP")
         sleep_hours = self._get_float("Sleep hours: ", 7.0, 0, 24)
         sleep_quality = self._get_int("Sleep quality (1-10): ", 7, 1, 10)
-        sleep_notes = input("Sleep notes: ").strip()
+        sleep_notes = self.safe_input("Sleep notes: ")
         
         print("\n🍽️ MEALS")
         meals = {}
         for meal in ["breakfast", "lunch", "dinner"]:
-            ate = input(f"  {meal.title()}? (y/n): ").strip().lower()
-            if ate == 'y':
-                food = input(f"    What: ").strip()
+            ate = self.safe_input(f"  {meal.title()}? (y/n): ")
+            if ate.lower() == 'y':
+                food = self.safe_input(f"    What: ")
                 meals[meal] = food
             else:
                 meals[meal] = "skipped"
@@ -1464,12 +1435,12 @@ MEAL-BY-MEAL ANALYSIS:
         print("\n🏃 ACTIVITY")
         steps = self._get_int("Steps: ", 5000, 0, 50000)
         
-        worked_out = input("Workout today? (y/n): ").strip().lower()
+        worked_out = self.safe_input("Workout today? (y/n): ")
         workout_duration = 0
         workout_type = ""
-        if worked_out == 'y':
+        if worked_out.lower() == 'y':
             workout_duration = self._get_int("Duration (min): ", 30, 1, 240)
-            workout_type = input("Type (e.g., cardio, strength, yoga): ").strip()
+            workout_type = self.safe_input("Type (e.g., cardio, strength, yoga): ")
         
         print("\n📊 METRICS (1-10)")
         energy = self._get_int("Energy: ", 5, 1, 10)
@@ -1477,10 +1448,10 @@ MEAL-BY-MEAL ANALYSIS:
         stress = self._get_int("Stress: ", 5, 1, 10)
         focus = self._get_int("Focus: ", 5, 1, 10)
         
-        symptoms_input = input("\nSymptoms (comma separated): ").strip()
+        symptoms_input = self.safe_input("\nSymptoms (comma separated): ")
         symptoms = [s.strip() for s in symptoms_input.split(",")] if symptoms_input else []
         
-        notes = input("Notes: ").strip()
+        notes = self.safe_input("Notes: ")
         
         log = DailyLog(
             log_id=log_id,
@@ -1519,7 +1490,7 @@ MEAL-BY-MEAL ANALYSIS:
         """Get integer input"""
         while True:
             try:
-                value = input(prompt).strip()
+                value = self.safe_input(prompt)
                 if not value:
                     return default
                 value = int(value)
@@ -1533,7 +1504,7 @@ MEAL-BY-MEAL ANALYSIS:
         """Get float input"""
         while True:
             try:
-                value = input(prompt).strip()
+                value = self.safe_input(prompt)
                 if not value:
                     return default
                 value = float(value)
@@ -1543,70 +1514,79 @@ MEAL-BY-MEAL ANALYSIS:
             except:
                 print("Enter a number")
     
-    def run_analysis(self, analysis_type: str):
-        """Run comprehensive analysis"""
+    def run_analysis(self, analysis_type: str) -> Dict:
+        """Run comprehensive analysis - returns results for web mode"""
         if not self.current_user_id:
+            if self.execution_mode == "web":
+                return {"success": False, "error": "Profile not set up"}
             print("Please setup profile first!")
-            return
+            return None
         
         profile = self.db.get_profile(self.current_user_id)
         logs = self.db.get_user_logs(self.current_user_id, days=14)
         if not logs:
+            if self.execution_mode == "web":
+                return {"success": False, "error": "No health data available"}
             print("No health data. Complete a check-in first.")
-            return
+            return None
         
         profile_dict = profile.to_dict()
         logs_dict = [log.to_dict() for log in logs]
         
-        print(f"\n{'='*60}")
-        print(f"🤖 {analysis_type.upper()} ANALYSIS")
-        print("="*60)
-        print(f"User: {profile.name}")
-        print(f"Data: {len(logs)} days")
-        print("-"*60)
+        if self.execution_mode == "cli":
+            print(f"\n{'='*60}")
+            print(f"🤖 {analysis_type.upper()} ANALYSIS")
+            print("="*60)
+            print(f"User: {profile.name}")
+            print(f"Data: {len(logs)} days")
+            print("-"*60)
+            print("🚀 Starting TAO agent...")
+            print("Agent will decide optimal number of reasoning loops")
+            print("-"*60)
         
         agent = self.agents.get(analysis_type)
         if not agent:
+            if self.execution_mode == "web":
+                return {"success": False, "error": f"Unknown analysis type: {analysis_type}"}
             print(f"❌ Unknown analysis type")
-            return
-        
-        print("🚀 Starting TAO agent...")
-        print("Agent will decide optimal number of reasoning loops")
-        print("-"*60)
+            return None
         
         result = agent.run(profile_dict, logs_dict)
         
-        if result["success"]:
-            print(f"\n✅ ANALYSIS COMPLETE")
-            print("="*60)
-            print(f"Iterations: {result['iterations']}/{result['max_iterations']}")
-            print(f"Confidence: {result['confidence']:.2f}")
-            print("="*60)
-            
-            output = result["output"]
-            if output and output != "No detailed analysis generated. Please try again with more data.":
-                lines = output.split('\n')
+        if self.execution_mode == "cli":
+            if result["success"]:
+                print(f"\n✅ ANALYSIS COMPLETE")
+                print("="*60)
+                print(f"Iterations: {result['iterations']}/{result['max_iterations']}")
+                print(f"Confidence: {result['confidence']:.2f}")
+                print("="*60)
                 
-                if len(lines) > 50:
-                    print('\n'.join(lines[:50]))
-                    print("\n" + "="*60)
-                    print("📄 OUTPUT CONTINUES...")
-                    print("="*60)
-                    print('\n'.join(lines[50:100]) if len(lines) > 100 else '\n'.join(lines[50:]))
+                output = result["output"]
+                if output and output != "No detailed analysis generated. Please try again with more data.":
+                    lines = output.split('\n')
                     
-                    if len(lines) > 100:
-                        print(f"\n... and {len(lines) - 100} more lines")
+                    if len(lines) > 50:
+                        print('\n'.join(lines[:50]))
+                        print("\n" + "="*60)
+                        print("📄 OUTPUT CONTINUES...")
+                        print("="*60)
+                        print('\n'.join(lines[50:100]) if len(lines) > 100 else '\n'.join(lines[50:]))
+                        
+                        if len(lines) > 100:
+                            print(f"\n... and {len(lines) - 100} more lines")
+                    else:
+                        print(output)
+                    
+                    save = self.safe_input("\n💾 Save full analysis to file? (y/n): ")
+                    if save.lower() == 'y':
+                        self._save_result(result, profile.name)
                 else:
-                    print(output)
-                
-                save = input("\n💾 Save full analysis to file? (y/n): ").strip().lower()
-                if save == 'y':
-                    self._save_result(result, profile.name)
+                    print("⚠️  No detailed analysis generated.")
+                    print("Please try with more data.")
             else:
-                print("⚠️  No detailed analysis generated.")
-                print("Please try with more data.")
-        else:
-            print(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+                print(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+        
+        return result
     
     def _save_result(self, result: Dict, username: str):
         """Save result to file"""
@@ -1679,7 +1659,11 @@ AGENT REASONING:
             print("\n📊 No data yet. Complete a check-in!")
     
     def run(self):
-        """Main application loop"""
+        """Main application loop - CLI only"""
+        if self.execution_mode == "web":
+            print("Web mode: Use Streamlit interface")
+            return
+        
         print("\n" + "="*60)
         print("🏥 HEALTH AI - PRODUCTION SYSTEM")
         print("="*60)
@@ -1714,7 +1698,7 @@ AGENT REASONING:
             
             print("="*60)
             
-            choice = input("\nSelect: ").strip()
+            choice = self.safe_input("\nSelect: ")
             
             if choice == "0":
                 print("\n👋 Thank you! Stay healthy!")
@@ -1743,7 +1727,7 @@ AGENT REASONING:
 def main():
     """Entry point"""
     try:
-        system = HealthAISystem()
+        system = HealthAISystem(execution_mode="cli")
         system.run()
     except KeyboardInterrupt:
         print("\n\n👋 Goodbye!")
