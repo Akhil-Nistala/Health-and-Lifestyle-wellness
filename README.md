@@ -1,271 +1,62 @@
-# 🏥 Health & Lifestyle AI — Agentic Wellness Assistant
+# 🧠 Agentic Health AI System
 
-### 🚀 Built for Innov-AI-tion Hackathon
+An autonomous, agent-based health assistant that provides personalized **diet**, **fitness**, and **health insights** using a **Think–Act–Observe (TAO)** reasoning framework.
 
-### 🤖 Powered by LangGraph + LLM TAO Reasoning
-
-### 🎯 Designed for Real Student Health Challenges
+This system goes beyond static recommendations by using **agentic reasoning loops** that adapt outputs based on user context and historical data.
 
 ---
 
-## 🧠 What is This?
+## ✨ Key Features
 
-Health & Lifestyle AI is an **agentic health intelligence system** that helps users improve:
+- **Agentic Reasoning (TAO Loop)**
+  - Think → Act → Observe → Refine
+  - Controlled iteration with explicit stopping conditions
 
-* 🍽️ Diet & Nutrition
-* 💪 Fitness & Workout Discipline
-* ⚕️ Holistic Health & Wellness
-* 🍛 Hostel Mess Eating Decisions (unique real-world problem)
+- **Multiple Specialized Agents**
+  - **Diet Agent**: Generates structured 7-day, day-wise meal plans
+  - **Fitness Agent**: Creates progressive workout plans
+  - **Health Agent**: Analyzes lifestyle risks and habits
+  - **Mess Food Optimizer**: Optimizes hostel/mess food for nutrition and budget
 
-Unlike normal chatbots, this system **thinks, plans, learns, and adapts autonomously**.
+- **Explainable Outputs**
+  - Each agent exposes reasoning steps and confidence
+  - No black-box decisions
 
-It uses:
-✔️ TAO Loop — THINK → ACT → OBSERVE
-✔️ LangGraph State Machine
-✔️ Multi-step reasoning
-✔️ Self-evaluation & adaptive intelligence
-✔️ Persistent personalized health memory
-
----
-
-## 🌍 Real Problem We Solve
-
-Students and working individuals struggle with:
-
-* inconsistent eating habits
-* lack of structured fitness planning
-* poor sleep & stress balance
-* no personalized guidance
-* hostel mess food confusion — “What to eat daily??”
-
-Current fitness apps are:
-❌ generic
-❌ non-personalized
-❌ not contextual to Indian lifestyle
-❌ do not reason or adapt
-❌ do not integrate diet + fitness + lifestyle + mess food together
-
-**We solve that. Meaningfully.**
+- **Streamlit-based UI**
+  - Simple, interactive web interface
+  - No CLI interaction required
 
 ---
 
-## ⭐ Key Features
+## 🧠 Agentic Design Overview
 
-### 👤 Smart Health Profile
+Each agent follows a **TAO (Think–Act–Observe)** loop:
 
-Captures:
+1. **Think**
+   - Analyze user profile and recent logs
+   - Decide the most valuable goal
 
-* Age, height, weight
-* BMI & category
-* Diet type (veg / non-veg / eggetarian / vegan)
-* Fitness goal
-* Activity level
-* Medical restrictions
-* Hostel / Mess access
-* Budget constraints
+2. **Act**
+   - Generate a solution based on the goal
 
----
+3. **Observe**
+   - Evaluate output quality and confidence
+   - Decide whether another iteration is needed
 
-### 📅 Daily Health Logging
-
-User logs daily:
-
-* Sleep duration + quality
-* Meals eaten
-* Water intake
-* Steps
-* Workout details
-* Mood, stress, focus level
-* Symptoms & notes
-
-System analyzes **patterns, not just one day**.
+Task-aware stopping logic ensures:
+- No infinite loops
+- No unnecessary reasoning
+- Predictable output size (web-safe)
 
 ---
 
-### 🤖 Agentic AI System (Game Changing Part)
+## 🗂 Project Structure
 
-We built 4 AI Agents powered by TAO reasoning:
-
----
-
-### 🍽️ Diet Agent
-
-Creates:
-
-* 7-day personalized meal plan
-* Portion sizes
-* Macros & nutrition targets
-* Budget grocery guide
-* Recipes + prep hacks
-* Eating out guidance
-* Consistency & tracking strategy
-
----
-
-### 💪 Fitness Agent
-
-Builds a **4-week progressive workout plan**
-
-* Gym + home alternatives
-* Sets, reps, timings
-* Mobility + recovery
-* Progression rules
-* Injury-safe guidance
-* Routine building system
-
----
-
-### ⚕️ Health & Risk Agent
-
-Provides:
-
-* Lifestyle health analysis
-* Sleep evaluation
-* Stress pattern analysis
-* Energy trend tracking
-* Preventive risk outlook
-* Daily + weekly improvements
-* Clear measurable habit strategies
-
-No medical diagnosis. Only safe preventive guidance.
-
----
-
-### 🍛 Hostel Mess Optimizer (Unique Innovation)
-
-First-of-its-kind student-focused feature.
-
-* Takes today’s mess menu
-* Scores food on:
-
-  * nutrition
-  * suitability
-  * protein quality
-  * value
-* Recommends:
-
-  * Must eat items
-  * Avoid items
-  * Portion sizes
-* Protein optimization
-* Calorie balance
-* Budget supplement help
-* Hydration + timing strategy
-* Ideal Indian plate breakdown
-* Backup alternatives
-
-**Solves a real student pain** — daily confusion on what to eat.
-
----
-
-## 🧠 Agent Intelligence Architecture
-
-Built using LangGraph + TAO Framework.
-
-Each AI Agent:
-1️⃣ THINK – analyzes logs + profile
-2️⃣ ACT – generates plan
-3️⃣ OBSERVE – evaluates output
-4️⃣ Decides to continue reasoning or stop
-5️⃣ Learns confidence + satisfaction scores
-
-Supports:
-
-* multi-round reasoning
-* autonomy
-* reflection
-* structured trace logging
-
-This proves **agentic behavior** beyond LLM replies.
-
----
-
-## 🏗️ Engineering Strengths
-
-* Persistent database storage
-* Backup restore capability
-* Dynamic adaptive reasoning depth
-* JSON safe parsing
-* Robust input validation
-* Exportable reports
-* CLI based interactive system
-* Reliable execution + error handling
-
----
-
-## 🖥️ System Flow
-
-1️⃣ Create profile
-2️⃣ Log daily wellness
-3️⃣ Run:
-
-* Diet Analysis
-* Fitness Analysis
-* Health Analysis
-  4️⃣ Upload Mess Menu
-  5️⃣ Run Mess Optimizer
-  6️⃣ View dashboard
-  7️⃣ Export reports
-
----
-
-## 🛡️ Safety & Ethics
-
-* Focuses on **lifestyle and preventive support**
-* Avoids medical diagnosis
-* Encourages professional consultation if risk flags
-* Maintains user privacy (local storage)
-
----
-
-## 🧪 Technology Stack
-
-* Python
-* LangGraph
-* LangChain Groq
-* LLM Autonomy
-* Persistent Storage (Pickle)
-* CLI System
-
----
-
-## 📌 Why This Matters?
-
-Because health is not just gym.
-It is:
-
-* sleep
-* food
-* stress
-* movement
-* discipline
-* real-life constraints
-
-This system truly **assists life**, not just chats.
-
----
-
-## 🎯 Target Users
-
-* Students in hostels
-* Busy professionals
-* Health beginners
-* People struggling to stay consistent
-
----
-
-## 🏁 Final Impact
-
-Helps users:
-✔️ eat better
-✔️ move better
-✔️ sleep better
-✔️ manage stress better
-✔️ make smarter food decisions
-✔️ build discipline
-
-All using **agentic AI intelligence**.
-
-
-
-Just tell me 😊
+```text
+.
+├── app.py                 # Streamlit application (entry point)
+├── agent_bridge.py        # Bridge between Streamlit and agent system
+├── lifestyle_final.py     # Core agent logic and TAO framework
+├── requirements.txt       # Dependencies
+├── README.md              # Project overview
+├── RUN.md                 # Setup and deployment instructions
