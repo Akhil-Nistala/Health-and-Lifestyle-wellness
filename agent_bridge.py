@@ -1,5 +1,8 @@
 # agent_bridge.py - CORRECTED VERSION
 import os
+from dotenv import load_dotenv
+load_dotenv()  # MUST be before agent system import
+
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -364,3 +367,4 @@ class AgentBridge:
                 'reasoning_trace': []
 
             }
+
